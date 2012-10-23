@@ -32,64 +32,8 @@ MA 02110-1301 USA.
 #include <unistd.h>
 #include "i2c-dev.h"
 #include "i2cbusses.h"
+#include "matrixLEDi2c.h"
 
-static void help(void) __attribute__ ((noreturn));
-
-static void help(void)
-{
-	fprintf(stderr, "Usage: my2cset (hardwired to bus 3, address 0x70)\n");
-	exit(1);
-}
-
-static int check_funcs(int file, int size)
-{
-	unsigned long funcs;
-
-	/* check adapter functionality */
-	if (ioctl(file, I2C_FUNCS, &funcs) < 0) {
-		fprintf(stderr, "Error: Could not get the adapter "
-		"functionality matrix: %s\n", strerror(errno));
-		return -1;
-	}
-
-	switch (size) {
-	case I2C_SMBUS_BYTE:
-		if (!(funcs & I2C_FUNC_SMBUS_WRITE_BYTE)) {
-			fprintf(stderr, MISSING_FUNC_FMT, "SMBus send byte");
-			return -1;
-		}
-		break;
-
-	case I2C_SMBUS_BYTE_DATA:
-		if (!(funcs & I2C_FUNC_SMBUS_WRITE_BYTE_DATA)) {
-			fprintf(stderr, MISSING_FUNC_FMT, "SMBus write byte");
-			return -1;
-		}
-		break;
-
-	case I2C_SMBUS_WORD_DATA:
-		if (!(funcs & I2C_FUNC_SMBUS_WRITE_WORD_DATA)) {
-			fprintf(stderr, MISSING_FUNC_FMT, "SMBus write word");
-			return -1;
-		}
-		break;
-
-	case I2C_SMBUS_BLOCK_DATA:
-		if (!(funcs & I2C_FUNC_SMBUS_WRITE_BLOCK_DATA)) {
-			fprintf(stderr, MISSING_FUNC_FMT, "SMBus block write");
-			return -1;
-		}
-		break;
-	case I2C_SMBUS_I2C_BLOCK_DATA:
-		if (!(funcs & I2C_FUNC_SMBUS_WRITE_I2C_BLOCK)) {
-			fprintf(stderr, MISSING_FUNC_FMT, "I2C block write");
-			return -1;
-		}
-		break;
-	}
-
-	return 0;
-}
 
 int main(int argc, char *argv[])
 {
@@ -145,63 +89,13 @@ int main(int argc, char *argv[])
 		res = i2c_smbus_write_byte(file, daddress);
 
 		int i;
-static __u16 smile_bmp[] = {0x3C, 0x42, 0x95, 0xA1, 0xA1, 0x95, 0x42, 0x3C};
-static __u16 frown_bmp[]=  {0x3C, 0x42, 0xA5, 0x91, 0x91, 0xA5, 0x42, 0x3C};
-static __u16 neutral_bmp[]={0x3C, 0x42, 0x95, 0x91, 0x91, 0x95, 0x42, 0x3C};
-static __u16 my_bmp[] =    {0xA5, 0x42, 0xA5, 0xA5, 0xA5, 0xA5, 0x42, 0xA5};
 
-/*
-* For some reason the display is rotated one column, so pre-unrotate the
-* data.
-*/
-		for(i=0; i<8; i++) {
-		block[i] = (smile_bmp[i]&0xfe) >>1 |
-		(smile_bmp[i]&0x01) << 7;
-		}
-		res = i2c_smbus_write_i2c_block_data(file, daddress, 16,
-		(__u8 *)block);
-
-		sleep(2);
-
-// Display a new picture
-		for(i=0; i<8; i++) {
-		block[i] = (frown_bmp[i]&0xfe) >>1 |
-		(frown_bmp[i]&0x01) << 7;
-		}
-		daddress = 0x00;
-		printf("writing: 0x%02x\n", daddress);
-		res = i2c_smbus_write_byte(file, daddress);
-
-		res = i2c_smbus_write_i2c_block_data(file, daddress, 16,
-		(__u8 *)block);
-
-		sleep(1);
-
-// Display yet another picture
-		for(i=0; i<8; i++) {
-		block[i] = (neutral_bmp[i]&0xfe) >>1 |
-		(neutral_bmp[i]&0x01) << 7;
-		}
-		daddress = 0x00;
-		printf("writing: 0x%02x\n", daddress);
-		res = i2c_smbus_write_byte(file, daddress);
-
-		res = i2c_smbus_write_i2c_block_data(file, daddress, 16,
-		(__u8 *)block);
-		sleep(1);
-
-// Display my picture
-		for(i=0; i<8; i++) {
-		block[i] = (my_bmp[i]&0xfe) >>1 |
-		(my_bmp[i]&0x01) << 7;
-		}
-		daddress = 0x00;
-		printf("writing: 0x%02x\n", daddress);
-		res = i2c_smbus_write_byte(file, daddress);
-
-		res = i2c_smbus_write_i2c_block_data(file, daddress, 16,
-		(__u8 *)block);
-		sleep(5);
+		displayImage(smile_bmp,res, daddress, file);
+		displayImage(frown_bmp,res, daddress, file);
+		displayImage(neutral_bmp,res, daddress, file);
+		displayImage(my_bmp,res, daddress, file);
+		sleep(4);
+		
 
 		// Closing file and turning off Matrix
 		printf("Closing file and turning off the LED Matrix\n");
@@ -211,7 +105,7 @@ static __u16 my_bmp[] =    {0xA5, 0x42, 0xA5, 0xA5, 0xA5, 0xA5, 0x42, 0xA5};
 		res = i2c_smbus_write_byte(file, daddress);
 
 		usleep(500000); // Sleep 0.5 seconds
-		//}
+		
 
 		break;
 
@@ -251,20 +145,6 @@ static __u16 my_bmp[] =    {0xA5, 0x42, 0xA5, 0xA5, 0xA5, 0xA5, 0x42, 0xA5};
 			res = i2c_smbus_read_byte_data(file, daddress);
 			}
 	close(file);
-
-	/*if (res < 0) {
-		printf("Warning - readback failed\n");
-		} else
-	if (res != value) {
-		printf("Warning - data mismatch - wrote "
-			"0x%0*x, read back 0x%0*x\n",
-			size == I2C_SMBUS_WORD_DATA ? 4 : 2, value,
-			size == I2C_SMBUS_WORD_DATA ? 4 : 2, res);
-	} else {
-		printf("Value 0x%0*x written, readback matched\n",
-			size == I2C_SMBUS_WORD_DATA ? 4 : 2, value);
-	}
-	*/
 
 	exit(0);
 }
